@@ -79,6 +79,13 @@ class TriageOutput(BaseModel):
     sentiment: Sentiment
     urgency: Urgency
     confidence: float = Field(ge=0.0, le=1.0)
+    risk_flags: list[EscalationReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def no_runtime_flags(self):
+        if EscalationReason.low_confidence in self.risk_flags:
+            raise ValueError("low_confidence is applied by the guardrail, not the model")
+        return self
 
 
 class SpecialistOutput(BaseModel):
