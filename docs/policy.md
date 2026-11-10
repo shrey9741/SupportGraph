@@ -44,6 +44,23 @@ re-check the labels.
 `low_confidence` is applied by the guardrail at runtime. It never appears as a
 ground-truth label.
 
+## Design principle: fail closed
+
+If an LLM call fails after its retries, the error is recorded and the guardrail
+adds `low_confidence`, so the ticket escalates to a human. A failure never
+auto-resolves.
+
+## Who detects what
+
+Escalation reasons come from two sources, and the guardrail takes the union:
+(1) the triage model's `risk_flags`, and (2) a regex safety net in
+`backend/app/guardrail.py` for the highest-stakes patterns (prompt injection,
+legal threats, fraud, security, GDPR, deletion, press, human requested). The
+regexes are a backstop so one model miss on a high-risk ticket does not become
+an unsafe auto-resolve. Reasons not covered by the regexes (outage, data loss,
+sales, out of scope and so on) depend on the model flagging them, which is
+exactly what the evaluation measures.
+
 ## Auto-resolve is allowed only when
 
 1. No escalation rule above applies.
