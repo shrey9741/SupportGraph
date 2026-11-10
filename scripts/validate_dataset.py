@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.schemas import TicketLabel  # noqa: E402
 
-PATH = ROOT / "data" / "tickets_labeled.jsonl"
+PATH = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data" / "tickets_labeled.jsonl"
 
 
 def main() -> int:
