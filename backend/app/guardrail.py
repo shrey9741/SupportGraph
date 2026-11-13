@@ -25,6 +25,10 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
     "prompt_injection": re.compile(
         r"ignore (all |any )?(previous|prior|above|earlier) (instructions|prompts?)"
         r"|disregard (all |any )?(previous|prior|your) instructions"
+        r"|(disregard|forget|override|bypass) (all |any |the |your )?(previous |prior |above )?"
+        r"(rules|instructions|guidelines|polic(y|ies))"
+        r"|\b(admin|developer|debug|god) mode\b"
+        r"|i('| a)m your (developer|creator|admin(istrator)?)"
         r"|reveal (your )?system prompt",
         re.I,
     ),
@@ -34,7 +38,23 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
     ),
     "human_requested": re.compile(
         r"\b(speak|talk|escalate) to (a |the |your )?(manager|human|real person|supervisor|agent)\b"
-        r"|\bcall me\b",
+        r"|\bcall me\b|\bcall (me )?back\b"
+        r"|\bescalate (this |it )?to (someone|somebody) (senior|higher|in charge)"
+        r"|\b(speak|talk) to (someone|somebody) (senior|in charge)",
+        re.I,
+    ),
+    "sales_enterprise": re.compile(
+        r"volume discount|bulk (pricing|discount)|custom (quote|pricing|contract)"
+        r"|enterprise (plan|quote|pricing|contract)|reseller|affiliate program"
+        r"|partner(ship)? with (you|your)",
+        re.I,
+    ),
+    "identity_verification": re.compile(
+        r"\b(can|could|would|will) you (please )?(reset|disable|remove|turn off|bypass)\b"
+        r".{0,30}\b(2fa|two[- ]factor|mfa|authenticator)"
+        r"|\b(lost|broke|broken|stolen) (my )?(phone|device|authenticator|backup codes)\b"
+        r".{0,60}\b(2fa|two[- ]factor|mfa|codes?|log ?in|access)"
+        r"|\bformer admin\b|no access to the (admin|owner)'?s? email",
         re.I,
     ),
     "compliance_request": re.compile(r"\b(gdpr|ccpa|data subject)\b", re.I),
@@ -54,7 +74,11 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 _AMOUNT_RE = re.compile(r"\$\s?([\d,]+(?:\.\d+)?)")
-_MONEY_WORDS_RE = re.compile(r"\b(refund(ed)?|billed|charged?|dispute|disputing|reimburse)\b", re.I)
+_MONEY_WORDS_RE = re.compile(
+    r"\b(refund(ed)?|billed|charged?|dispute|disputing|reimburse|overcharg\w*|discrepanc\w*"
+    r"|billing error|wrong amount|incorrect (amount|charge|invoice)|(doesn'?t|does not) match)\b",
+    re.I,
+)
 
 
 @dataclass
