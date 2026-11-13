@@ -18,6 +18,8 @@ class Settings:
     confidence_threshold: float = 0.75
     refund_auto_limit_usd: float = 200.0
     max_llm_attempts: int = 3
+    database_path: str = str(ROOT / "support_graph.db")
+    cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
 
 
 def get_settings() -> Settings:
@@ -29,4 +31,10 @@ def get_settings() -> Settings:
         confidence_threshold=float(os.getenv("CONFIDENCE_THRESHOLD", "0.75")),
         refund_auto_limit_usd=float(os.getenv("REFUND_AUTO_LIMIT_USD", "200")),
         max_llm_attempts=int(os.getenv("MAX_LLM_ATTEMPTS", "3")),
+        database_path=os.getenv("DATABASE_PATH", str(ROOT / "support_graph.db")),
+        cors_origins=tuple(
+            o.strip()
+            for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+            if o.strip()
+        ),
     )
