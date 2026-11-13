@@ -316,8 +316,25 @@ Four screens, built from a Stitch design and wired to the real API:
 | **Ticket Audit Trail** | Every event for a ticket with expandable raw JSON, time offsets, summary card and copy-as-JSON |
 | **Dashboard** | Live counts and charts from `/stats`, plus the offline model-comparison table |
 
-<!-- Add screenshots here: docs/screenshots/live-console.png etc. -->
+### Live Console
+Submit a ticket and watch each pipeline step arrive in real time.
 
+![Live Console](docs/screenshots/live-console.png)
+
+### Review Queue
+Escalated tickets with reasons, confidence and an editable draft for the reviewer.
+
+![Review Queue](docs/screenshots/review-queue.png)
+
+### Ticket Audit Trail
+Every step of one ticket, with expandable raw output.
+
+![Ticket Audit Trail](docs/screenshots/audit-trail.png)
+
+### Dashboard
+Live counts and charts, plus the offline model comparison.
+
+![Dashboard](docs/screenshots/dashboard.png)
 ---
 
 ## Evaluation
