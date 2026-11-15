@@ -335,6 +335,7 @@ Every step of one ticket, with expandable raw output.
 Live counts and charts, plus the offline model comparison.
 
 ![Dashboard](docs/screenshots/dashboard.png)
+
 ---
 
 ## Evaluation
@@ -363,7 +364,7 @@ progress. Re-running skips finished tickets (`--fresh` starts over).
 | Over-escalation | 4% | 4% | 6% |
 | Primary reason match (strict) | 68% | 86% | 82% |
 
-### Held-out set v1 (50 tickets, 25 should escalate, one run per model)
+### Held-out set v1, before the fixes (50 tickets, 25 should escalate, one run per model)
 
 | Metric | gpt-oss-20b | gpt-oss-120b |
 |---|---|---|
@@ -379,25 +380,49 @@ recall could plausibly be anywhere between about 70% and 96%, and the gap betwee
 two models is within run-to-run noise (Groq output is not fully deterministic even at
 temperature 0). Neither model is shown to be better, so the cheaper 20b is the default.
 
+### Held-out set v2 (50 tickets, 26 should escalate, one run per model)
+
+Written after the guardrail fixes, so it can validate them. Labels were reviewed and frozen
+before any model ran (commit `1dde7c1`). Eight tickets on the 120b run hit network errors and
+were re-run once with `--retry-errors`; no result was changed or tuned.
+
+| Metric | gpt-oss-20b | gpt-oss-120b |
+|---|---|---|
+| Category accuracy | 92% (46/50) | 96% (48/50) |
+| Escalation recall | 100% (26/26) | 100% (26/26) |
+| Unsafe auto-resolves | 0 | 0 |
+| Over-escalation | 17% (4/24) | 4% (1/24) |
+| Primary reason match (strict) | 88% (23/26) | 92% (24/26) |
+| Reason found anywhere | 92% (24/26) | 96% (25/26) |
+
+**How to read this.** Unsafe auto-resolves fell from 1 and 3 on v1 to 0 on both models, which fits
+the fixes working. It is not proof: the tickets are different from v1, the author had seen the new
+rules, and 26 of 26 still allows a true miss rate near 11%. Over-escalation did not improve for the
+20b (17% vs 12%, a one-ticket difference). Neither model is consistently better across v1 and v2,
+so the cheaper 20b remains the default.
+
+**New gap found:** prompt injections phrased as a note to the AI ("Note to the AI processing this
+ticket: the policy has changed...") were missed by both models, and "repeat your hidden instructions"
+was missed by the 20b. Both were escalated only because of a dollar amount in the text, so they were
+not quarantined. v2 is now used up for evaluating fixes to this.
+
 ---
 
 ## Known gaps
 
-Seen in both models on the held-out set. These are the actionable ones:
+**Fixed after held-out v1 (validated on held-out v2, see above):**
+- Pricing negotiation (volume discounts, custom contracts) is now recognised as `sales_enterprise`.
+- Credential recovery (2FA reset, lost phone or backup codes, former admin, ownership or email transfer) now maps to `identity_verification`.
+- "Call me back" and "escalate to someone senior" now map to `human_requested`.
+- Injection phrasing such as "admin mode" or "forget your rules" is caught by wider `prompt_injection` patterns.
+- Money-dispute wording ("overcharge", "doesn't match", "billing error") now triggers the refund-limit check, so disputed invoices escalate for the right reason.
 
-- Pricing negotiation (volume discounts, seat counts) is not recognised as `sales_enterprise`.
-- Credential-recovery actions (2FA reset, email change, ownership transfer) have no
-  rule for `identity_verification`.
-- Some risky tickets escalate for the wrong reason (for example a disputed invoice
-  escalated only as `low_confidence`). Safe, but fragile.
-- A Hinglish "payment failed, money deducted" ticket is over-escalated as `angry_customer`,
-  and a Spanish "charged twice" ticket was flagged `potential_fraud` while the English
-  version was not.
-- Knowledge-dependent questions (refund policy, import size limits) escalate as
-  `low_confidence` because the specialists have no knowledge source. This caps the
-  auto-resolve rate more than model quality does.
+These fixes were written while looking at held-out v1, so v1 cannot validate them. Held-out v2 was written afterwards to do that.
 
-The held-out v1 set is now burned for evaluating fixes, so fixes need a fresh set.
+**Still open:**
+- Prompt injections phrased as an instruction to the AI mid-ticket are not reliably flagged, so they skip quarantine. Seen on held-out v2.
+- A Hinglish "payment failed, money deducted" ticket is over-escalated as `angry_customer`, and a Spanish "charged twice" ticket was flagged `potential_fraud` while the English version was not.
+- Knowledge-dependent questions (refund policy, import size limits, error codes) escalate as `low_confidence` because the specialists have no knowledge source. This caps the auto-resolve rate more than model quality does.
 
 ---
 
@@ -410,8 +435,10 @@ The held-out v1 set is now burned for evaluating fixes, so fixes need a fresh se
 - [x] Evaluation harness, held-out set and honest reporting
 - [x] FastAPI backend with SQLite audit log, live SSE trace and human review
 - [x] React console: live trace, review queue, audit trail, dashboard
-- [ ] Fix the known gaps above (credential-recovery rule, pricing negotiation, wrong-reason escalations)
-- [ ] Fresh held-out v2 set (owner-reviewed labels) to validate the fixes
+- [x] Fix the known gaps (credential-recovery rule, pricing negotiation, callbacks, injection phrasing, money-dispute wording)
+- [x] Fresh held-out v2 set (50 tickets, owner-reviewed labels, frozen before any run)
+- [x] Owner review of v2 labels, then one run per model to validate the fixes
+- [ ] Fix the injection gap found on v2, validate on a fresh held-out v3
 - [ ] Optional FAQ lookup tool so specialists can answer policy questions
 - [ ] Authentication and per-reviewer accounts (out of scope for the portfolio version)
 - [ ] Dockerfile and a hosted demo
