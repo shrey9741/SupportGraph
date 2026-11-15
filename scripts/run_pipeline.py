@@ -8,7 +8,8 @@ Examples (from the project root):
 
 Results are appended to data/results/<provider>_<model>.jsonl as each ticket
 finishes, so a crash or rate limit never loses progress. Re-running skips
-tickets already done. Use --fresh to start over.
+tickets already done. Use --fresh to start over,
+or --retry-errors to re-run only tickets that hit a pipeline error.
 """
 import argparse
 import json
@@ -121,6 +122,11 @@ def main() -> None:
     ap.add_argument("--limit", type=int, help="only run the first N tickets")
     ap.add_argument("--delay", type=float, default=0.0, help="seconds to sleep between tickets")
     ap.add_argument("--fresh", action="store_true", help="ignore and overwrite saved results")
+    ap.add_argument(
+        "--retry-errors", action="store_true",
+        help="re-run only tickets whose saved result has a pipeline error (e.g. a dropped connection); "
+             "keeps every other saved result untouched",
+    )
     ap.add_argument("--verbose", action="store_true", help="print every ticket's decision")
     args = ap.parse_args()
 
@@ -150,6 +156,14 @@ def main() -> None:
             if line.strip():
                 r = json.loads(line)
                 results[r["id"]] = r
+    if args.retry_errors:
+        failed = sorted(i for i, r in results.items() if r.get("error"))
+        for i in failed:
+            del results[i]
+        if failed:
+            # Rewrite the file without the failed rows so the retried ones replace them.
+            out_path.write_text("".join(json.dumps(r) + "\n" for r in results.values()), encoding="utf-8")
+        print(f"Retrying {len(failed)} ticket(s) that had pipeline errors: {', '.join(failed) or 'none'}")
     todo = [l for l in labels if l.id not in results]
     print(f"Provider: {tag} | {len(labels)} tickets, {len(results)} already done, {len(todo)} to run")
 
