@@ -3,6 +3,7 @@
 Fail-safe rule: if an LLM step fails after its retries, the node records the
 error and the guardrail escalates the ticket. A failure never auto-resolves.
 """
+import re
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -24,8 +25,14 @@ def _event(node: str, output: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_TICKET_TAG = re.compile(r"<\s*/?\s*ticket\s*>", re.I)
+
+
 def _wrap(text: str) -> str:
-    return f"<ticket>\n{text}\n</ticket>"
+    # The ticket is untrusted. Remove any ticket tags it contains so it cannot close the
+    # wrapper early and make its own text look like instructions.
+    safe = _TICKET_TAG.sub("[ticket-tag removed]", text)
+    return f"<ticket>\n{safe}\n</ticket>"
 
 
 def build_nodes(llm: LLMClient, settings: Settings) -> dict[str, Callable[[TicketState], dict]]:

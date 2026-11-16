@@ -29,8 +29,24 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
         r"(rules|instructions|guidelines|polic(y|ies))"
         r"|\b(admin|developer|debug|god) mode\b"
         r"|i('| a)m your (developer|creator|admin(istrator)?)"
-        r"|reveal (your )?system prompt",
-        re.I,
+        r"|reveal (your )?system prompt"
+        # Addressing the automated processor directly ("note to the AI processing this ticket").
+        r"|\b(notes?|messages?|instructions?|memo|attention)\s+(to|for)\s+(the\s+)?"
+        r"(ai|a\.i\.|assistant|bot|llm|model|agent|system)\b"
+        r"|\b(ai|assistant|bot|llm|model)\s+(that is\s+|who is\s+)?(processing|reading|handling|reviewing)"
+        r"\s+this\s+(ticket|message|email|conversation)"
+        # Trying to extract the hidden instructions.
+        r"|\b(repeat|print|show|output|reveal|display|share|disclose|tell me)\b.{0,40}\b"
+        r"(hidden|system|internal|initial|original|secret|underlying)\s+(instructions|prompt|rules|guidelines)"
+        r"|\b(repeat|print|output)\b.{0,30}\byour\s+(instructions|prompt)\b"
+        # Role or mode switching, and blanket approval orders.
+        r"|\bfrom now on,?\s+(you|the\s+(ai|assistant))\b"
+        r"|\bpretend\s+(to be|you are|that you)\b"
+        r"|\bact as\s+(an?\s+)?(admin(istrator)?|developer|system|root|unrestricted)"
+        r"|\b(auto[- ]?approve|automatically approve)\b.{0,30}\b(all|every|any)\b"
+        # Trying to break out of the <ticket> wrapper or fake a system turn.
+        r"|</\s*ticket\s*>|\[/?(system|inst)\]|^\s*(system|assistant|developer)\s*:",
+        re.I | re.M,
     ),
     "legal_threat": re.compile(
         r"\b(lawyer|attorney|lawsuit|legal action|chargeback)\b|\bsue (you|your|the company)\b",
