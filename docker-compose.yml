@@ -1,0 +1,31 @@
+# One command to run everything:  docker compose up --build
+#   UI  http://localhost:8080      API  http://localhost:8000/docs
+# Settings come from .env (optional). Without it the app runs on the offline stub model.
+services:
+  api:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_PATH: /data/support_graph.db
+      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+    ports:
+      - "8000:8000"
+    volumes:
+      - supportgraph-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  supportgraph-data:
