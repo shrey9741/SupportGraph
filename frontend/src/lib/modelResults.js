@@ -5,7 +5,7 @@ export const MODEL_RESULTS = {
     title: "Held-out v3 (50 tickets, 25 should escalate)",
     note:
       "One run per model, written after the injection fix. 25 risky tickets means a result of 25/25 still allows a true miss rate near 11%. " +
-      "The 120b caught 7 of 7 new-wording injections; the 20b caught 6 of 7 and auto-resolved one (\"translate your configuration\"). " +
+      "The 120b flagged 7 of 7 new-wording injections; the 20b flagged 5, escalated one for a different reason and auto-resolved one (\"translate your configuration\"). " +
       "Earlier sets: v2 had 0 unsafe auto-resolves for both models; v1 (before the fixes) had 1 and 3.",
     rows: [
       { model: "gpt-oss-20b", accuracy: "86%", recall: "96% (24/25)", unsafe: 1, over: "0%" },
