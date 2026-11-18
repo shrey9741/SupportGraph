@@ -14,6 +14,7 @@ export function buildSteps(events, finished) {
   // Category "other" legitimately skips specialists: treat as skipped once the guardrail has run.
   const specialistSkipped = !byStep.specialist && byStep.guardrail;
 
+
   
   let runningAssigned = false;
   return STEPS.map((key) => {
