@@ -16,6 +16,7 @@ export function buildSteps(events, finished) {
 
 
   
+  
   let runningAssigned = false;
   return STEPS.map((key) => {
     const ev = byStep[key];
