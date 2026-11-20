@@ -10,6 +10,10 @@ services:
     environment:
       DATABASE_PATH: /data/support_graph.db
       CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      # Set these in .env next to this file; compose refuses to start without them.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (32+ characters)}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
     ports:
       - "8000:8000"
     volumes:
