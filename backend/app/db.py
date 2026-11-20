@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS reviews (
   note TEXT,
   at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'reviewer',   -- admin | reviewer
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at);
 """
@@ -82,6 +91,10 @@ def session(path: str) -> Iterator[sqlite3.Connection]:
 def init_db(path: str) -> None:
     with session(path) as conn:
         conn.executescript(SCHEMA)
+        # Light migration for databases created before accounts existed.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(reviews)")}
+        if "reviewer_id" not in cols:
+            conn.execute("ALTER TABLE reviews ADD COLUMN reviewer_id INTEGER")
 
 
 def _ticket(row: sqlite3.Row) -> dict[str, Any]:
@@ -173,13 +186,57 @@ def get_events(conn: sqlite3.Connection, ticket_id: str, after_seq: int = 0) -> 
 def add_review(
     conn: sqlite3.Connection, ticket_id: str, action: str, reviewer: str,
     edited_reply: Optional[str], final_reply: Optional[str], note: Optional[str],
+    reviewer_id: Optional[int] = None,
 ) -> None:
     conn.execute(
-        """INSERT INTO reviews (ticket_id, action, edited_reply, final_reply, reviewer, note, at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (ticket_id, action, edited_reply, final_reply, reviewer, note, now()),
+        """INSERT INTO reviews (ticket_id, action, edited_reply, final_reply, reviewer, reviewer_id, note, at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (ticket_id, action, edited_reply, final_reply, reviewer, reviewer_id, note, now()),
     )
     conn.execute("UPDATE tickets SET review_action = ? WHERE id = ?", (action, ticket_id))
+
+
+# ------------------------------------------------------------------ users ----
+
+PUBLIC_USER_FIELDS = "id, email, name, role, active, created_at"  # never includes password_hash
+
+
+def create_user(conn: sqlite3.Connection, email: str, name: str, password_hash: str, role: str) -> int:
+    cur = conn.execute(
+        "INSERT INTO users (email, name, password_hash, role, active, created_at) VALUES (?, ?, ?, ?, 1, ?)",
+        (email.lower(), name, password_hash, role, now()),
+    )
+    return cur.lastrowid
+
+
+def get_user(conn: sqlite3.Connection, user_id: int) -> Optional[dict[str, Any]]:
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_email(conn: sqlite3.Connection, email: str) -> Optional[dict[str, Any]]:
+    row = conn.execute("SELECT * FROM users WHERE email = ?", (email.lower(),)).fetchone()
+    return dict(row) if row else None
+
+
+def list_users(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute(f"SELECT {PUBLIC_USER_FIELDS} FROM users ORDER BY created_at, id")]
+
+
+def count_users(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def count_active_admins(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1").fetchone()[0]
+
+
+def update_user(conn: sqlite3.Connection, user_id: int, **fields: Any) -> None:
+    allowed = {"active", "role", "name", "password_hash"}
+    sets = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    if not sets:
+        return
+    conn.execute(f"UPDATE users SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?", [*sets.values(), user_id])
 
 
 # ------------------------------------------------------------------ stats ----
