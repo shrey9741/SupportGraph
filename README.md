@@ -16,7 +16,7 @@
   <img alt="Evals" src="https://img.shields.io/badge/evals-held--out%20set-0A9EDC">
 </p>
 
-> **Not a RAG project.** There is no retrieval. The interesting problems here are routing, guardrails, failure handling, human-in-the-loop review and honest evaluation. This is an independent student project that runs locally: it has no authentication, and its datasets are synthetic. See [Limits and honesty notes](#limits-and-honesty-notes).
+> **Not a RAG project.** There is no retrieval. The interesting problems here are routing, guardrails, failure handling, human-in-the-loop review and honest evaluation. This is an independent student project that runs locally: it has reviewer accounts but no multi-tenancy or hosted deployment, and its datasets are synthetic. See [Limits and honesty notes](#limits-and-honesty-notes).
 
 ---
 
@@ -283,6 +283,10 @@ python scripts/seed_demo.py --limit 30
 | `MAX_LLM_ATTEMPTS` | `3` | Retries per LLM call before failing closed |
 | `DATABASE_PATH` | `support_graph.db` | SQLite file location |
 | `CORS_ORIGINS` | Vite dev origins | Allowed browser origins |
+| `AUTH_REQUIRED` | `true` | Set `false` to switch login off (local experiments only) |
+| `JWT_SECRET` | none | Token signing key, 32+ characters. The API refuses to start with login on and a short or missing key. |
+| `TOKEN_TTL_HOURS` | `8` | Login lifetime |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | none | Creates the first admin when the database has no users |
 
 The frontend reads `VITE_API_URL` (see `frontend/.env.example`) if the API is not at `http://127.0.0.1:8000`.
 
@@ -292,7 +296,10 @@ The frontend reads `VITE_API_URL` (see `frontend/.env.example`) if the API is no
 
 | Endpoint | What it does |
 |---|---|
-| `GET /health` | Status, provider and model in use |
+| `GET /health` | Status, provider, model and whether login is required (open) |
+| `POST /auth/login` | Email and password for a bearer token. Throttled per email and per IP (429). Unknown user and wrong password give the same 401. |
+| `GET /auth/me`, `POST /auth/change-password` | Current account; change your own password |
+| `GET/POST /users`, `PATCH /users/{id}` | Admin only: list, create, disable, change role, reset password. You cannot demote or disable yourself, or remove the last admin. |
 | `POST /tickets` | Submit `{"text": "...", "ticket_id": "optional"}`. Returns 202 and runs in the background. `?wait=true` runs inline and returns 201. A repeated `ticket_id` returns 200 with `already_existed`. The same id with different text is 409. |
 | `GET /tickets` | List tickets. Filter with `?status=`, page with `limit` and `offset`. |
 | `GET /tickets/{id}` | Outcome, reasons, draft reply, escalation packet and review |
@@ -301,18 +308,25 @@ The frontend reads `VITE_API_URL` (see `frontend/.env.example`) if the API is no
 | `POST /tickets/{id}/review` | `approve`, `edit` or `reject` an escalated or failed ticket. One review per ticket. |
 | `GET /stats` | Counts, auto-resolve rate, escalation reasons, review counts, average processing time |
 
-There is **no authentication**. This is a local portfolio project. Do not expose it to the internet.
+Every endpoint except `/health` and `/auth/login` needs `Authorization: Bearer <token>`.
+
+### Accounts
+- Passwords are hashed with scrypt (standard library). Tokens are short-lived signed JWTs that carry only the user id. The user is re-read on every request, so disabling an account takes effect immediately.
+- Roles: `admin` (manages accounts) and `reviewer`. A review is attributed to the logged-in account, not to a name typed in the request, and the audit trail records the reviewer's email.
+- The browser stream uses `fetch` rather than `EventSource`, because `EventSource` cannot send an Authorization header.
+- First run: set `JWT_SECRET`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`. The admin is created on first start, then add reviewers from the **Reviewer accounts** page.
+- Known limits: the login throttle is in memory (resets on restart, per process), the token is kept in `localStorage`, and there is no password-reset email or MFA.
 
 ---
 
 ## Frontend
 
-Four screens, built from a Stitch design and wired to the real API:
+Login plus four screens (and an admin-only accounts page), built from a Stitch design and wired to the real API:
 
 | Screen | What it shows |
 |---|---|
 | **Live Console** | Submit a ticket and watch Intake, Triage, Specialist (or Quarantine), Guardrail and Outcome arrive live over SSE |
-| **Review Queue** | Escalated and failed tickets, oldest first, with reasons, confidence bars and an editable draft. Approve, edit or reject, attributed to a named reviewer. |
+| **Review Queue** | Escalated and failed tickets, oldest first, with reasons, confidence bars and an editable draft. Approve, edit or reject, recorded under the logged-in account. |
 | **Ticket Audit Trail** | Every event for a ticket with expandable raw JSON, time offsets, summary card and copy-as-JSON |
 | **Dashboard** | Live counts and charts from `/stats`, plus the offline model-comparison table |
 
@@ -474,7 +488,7 @@ These fixes were written while looking at held-out v1, so v1 cannot validate the
 - [x] Fix the injection gap found on v2, validate on a fresh held-out v3
 - [ ] Close the remaining 20b injection miss (config-extraction wording), validate on a fresh held-out v4
 - [ ] Optional FAQ lookup tool so specialists can answer policy questions
-- [ ] Authentication and per-reviewer accounts (out of scope for the portfolio version)
+- [x] Authentication and per-reviewer accounts (scrypt, JWT, admin and reviewer roles)
 - [ ] Dockerfile and a hosted demo
 
 ---
@@ -489,4 +503,4 @@ These fixes were written while looking at held-out v1, so v1 cannot validate the
   does not mean a zero miss rate.
 - The model-comparison table in the dashboard is static (copied from this README), not
   computed from live traffic.
-- No authentication, rate limiting or multi-tenancy. Run it locally.
+- Accounts exist, but there is no multi-tenancy, MFA or persistent rate limiting. Treat any public deployment as a demo.
