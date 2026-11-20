@@ -20,6 +20,12 @@ class Settings:
     max_llm_attempts: int = 3
     database_path: str = str(ROOT / "support_graph.db")
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
+    # Authentication. Turn off only for local experiments and tests.
+    auth_required: bool = True
+    jwt_secret: str | None = None  # if unset, a random one is generated at startup (logins reset on restart)
+    token_ttl_hours: float = 8.0
+    admin_email: str | None = None  # bootstrap: creates the first admin if there are no users yet
+    admin_password: str | None = None
 
 
 def get_settings() -> Settings:
@@ -37,4 +43,9 @@ def get_settings() -> Settings:
             for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
             if o.strip()
         ),
+        auth_required=os.getenv("AUTH_REQUIRED", "true").lower() not in ("0", "false", "no", "off"),
+        jwt_secret=os.getenv("JWT_SECRET") or None,
+        token_ttl_hours=float(os.getenv("TOKEN_TTL_HOURS", "8")),
+        admin_email=os.getenv("ADMIN_EMAIL") or None,
+        admin_password=os.getenv("ADMIN_PASSWORD") or None,
     )
