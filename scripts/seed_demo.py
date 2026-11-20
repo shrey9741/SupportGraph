@@ -7,6 +7,7 @@ Safe to re-run: ticket ids are fixed, and the API is idempotent per id.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 
 import httpx
@@ -18,12 +19,21 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--url", default="http://127.0.0.1:8000")
     p.add_argument("--limit", type=int, default=30)
+    p.add_argument("--email", default=os.getenv("SEED_EMAIL") or os.getenv("ADMIN_EMAIL"), help="login (or set SEED_EMAIL / ADMIN_EMAIL)")
+    p.add_argument("--password", default=os.getenv("SEED_PASSWORD") or os.getenv("ADMIN_PASSWORD"), help="password (or set SEED_PASSWORD / ADMIN_PASSWORD)")
     p.add_argument("--dataset", default=str(ROOT / "data" / "tickets_labeled.jsonl"))
     args = p.parse_args()
 
     rows = [json.loads(line) for line in Path(args.dataset).read_text(encoding="utf-8").splitlines() if line.strip()]
     counts: dict[str, int] = {}
     with httpx.Client(base_url=args.url, timeout=120) as client:
+        if client.get("/health").json().get("auth_required"):
+            if not (args.email and args.password):
+                raise SystemExit("The API requires login. Pass --email and --password (or set SEED_EMAIL / SEED_PASSWORD).")
+            r = client.post("/auth/login", json={"email": args.email, "password": args.password})
+            if r.status_code != 200:
+                raise SystemExit(f"Login failed: {r.json().get('detail', r.status_code)}")
+            client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
         for row in rows[: args.limit]:
             r = client.post("/tickets", params={"wait": "true"}, json={"ticket_id": row["id"], "text": row["text"]})
             r.raise_for_status()
