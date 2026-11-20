@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Ban, CheckCheck, Pencil, ThumbsUp, Inbox, ScrollText } from "lucide-react";
 import { api } from "../lib/api.js";
 import { usePolling } from "../lib/usePolling.js";
+import { useAuth } from "../lib/auth.jsx";
 import { timeAgo, shortId } from "../lib/format.js";
 import { Button, Card, CategoryPill, ConfidenceBar, Empty, ErrorNote, Pill, ReasonChip, StatusBadge, cx } from "../components/ui.jsx";
 
@@ -95,7 +96,7 @@ function ReviewDetail({ id, onDone }) {
   const detail = usePolling(() => api.getTicket(id), 0, [id]);
   const t = detail.data;
   const [reply, setReply] = useState("");
-  const [reviewer, setReviewer] = useState(() => { try { return localStorage.getItem("sg_reviewer") || ""; } catch { return ""; } });
+  const { user } = useAuth();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -111,12 +112,10 @@ function ReviewDetail({ id, onDone }) {
   const canReview = !t.review && (t.status === "escalated" || t.status === "failed");
 
   async function act(action) {
-    if (!reviewer.trim()) { setErr("Enter your name so the decision is attributed in the audit log."); return; }
     setBusy(true); setErr(null);
     try {
-      try { localStorage.setItem("sg_reviewer", reviewer.trim()); } catch { /* ignore */ }
       await api.review(t.id, {
-        action, reviewer: reviewer.trim(), note: note.trim() || null,
+        action, note: note.trim() || null,
         edited_reply: action === "edit" ? reply : null,
       });
       await detail.reload();
@@ -185,16 +184,13 @@ function ReviewDetail({ id, onDone }) {
 
       {canReview && (
         <Card className="space-y-3 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-muted">Reviewer name
-              <input value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="Your name"
-                className="mt-1 w-full rounded-md border border-line bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent" />
-            </label>
-            <label className="text-xs text-muted">Note (optional)
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Resolution note"
-                className="mt-1 w-full rounded-md border border-line bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent" />
-            </label>
+          <div className="text-xs text-muted">
+            Reviewing as <span className="font-medium text-ink">{user.name}</span>. Your decision is recorded under this account.
           </div>
+          <label className="block text-xs text-muted">Note (optional)
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Resolution note"
+              className="mt-1 w-full rounded-md border border-line bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent" />
+          </label>
           {err && <ErrorNote>{err}</ErrorNote>}
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="danger" icon={Ban} disabled={busy} onClick={() => act("reject")}>Reject</Button>
