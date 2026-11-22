@@ -10,8 +10,9 @@ from typing import Any, Callable
 from .config import Settings
 from .guardrail import evaluate
 from .llm import LLMClient, LLMError
-from .prompts import TRIAGE_SYSTEM, specialist_system
-from .schemas import SpecialistOutput, TriageOutput
+from .knowledge import run_lookup
+from .prompts import TRIAGE_SYSTEM, lookup_system, specialist_system
+from .schemas import LookupPlan, SpecialistOutput, TriageOutput
 from .state import TicketState
 
 SPECIALISTS = ("billing", "technical", "account")
@@ -70,11 +71,42 @@ def build_nodes(llm: LLMClient, settings: Settings) -> dict[str, Callable[[Ticke
         update["trace"] = [_event("triage", dict(update))]
         return update
 
+    def lookup(state: TicketState) -> dict:
+        """Ask the model which product facts are needed, then run only valid tool calls.
+
+        The model's output is a short list of (tool, arg) pairs checked against closed enums, so
+        even a manipulated ticket can only cause a harmless read of fixed policy text. If this step
+        fails the specialist simply runs without facts, as before; the guardrail still checks the
+        draft for invented figures.
+        """
+        executed: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
+        error = None
+        try:
+            plan = llm.structured(LookupPlan, lookup_system(), _wrap(state["raw_text"]))
+            seen: set[tuple[str, str | None]] = set()
+            for req in plan.lookups[:3]:
+                res = run_lookup(req.tool, req.arg)
+                key = (res["tool"], res.get("arg"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                (executed if res["ok"] else rejected).append(res)
+        except LLMError as e:
+            error = str(e)
+        event: dict[str, Any] = {
+            "lookups": [{"tool": r["tool"], "arg": r["arg"]} for r in executed],
+            "rejected": [{"tool": r["tool"], "arg": r["arg"], "error": r["error"]} for r in rejected],
+        }
+        if error:
+            event["lookup_error"] = error
+        return {"facts": executed, "trace": [_event("lookup", event)]}
+
     def make_specialist(category: str) -> Callable[[TicketState], dict]:
         name = f"{category}_specialist"
-        system = specialist_system(category)
 
         def node(state: TicketState) -> dict:
+            system = specialist_system(category, [f["text"] for f in state.get("facts", []) or []])
             try:
                 out = llm.structured(SpecialistOutput, system, _wrap(state["raw_text"]))
                 update: dict[str, Any] = {
@@ -110,7 +142,10 @@ def build_nodes(llm: LLMClient, settings: Settings) -> dict[str, Callable[[Ticke
             "guardrail_decision": result.decision,
             "guardrail_reasons": result.reasons,
         }
-        update["trace"] = [_event("guardrail", dict(update))]
+        event = dict(update)
+        if result.ungrounded:
+            event["ungrounded_figures"] = result.ungrounded
+        update["trace"] = [_event("guardrail", event)]
         return update
 
     def resolve(state: TicketState) -> dict:
@@ -143,6 +178,7 @@ def build_nodes(llm: LLMClient, settings: Settings) -> dict[str, Callable[[Ticke
     nodes: dict[str, Callable[[TicketState], dict]] = {
         "intake": intake,
         "triage": triage,
+        "lookup": lookup,
         "quarantine": quarantine,
         "guardrail": guardrail,
         "resolve": resolve,
