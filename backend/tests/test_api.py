@@ -51,8 +51,8 @@ def test_submit_wait_auto_resolves_and_logs_every_step(client):
 
     trace = client.get(f"/tickets/{t['id']}/trace").json()
     assert [e["node"] for e in trace["events"]] == [
-        "intake", "triage", "billing_specialist", "guardrail", "resolve"]
-    assert [e["seq"] for e in trace["events"]] == [1, 2, 3, 4, 5]
+        "intake", "triage", "lookup", "billing_specialist", "guardrail", "resolve"]
+    assert [e["seq"] for e in trace["events"]] == [1, 2, 3, 4, 5, 6]
 
 
 def test_escalation_stores_packet_and_reason(client):
@@ -75,7 +75,7 @@ def test_submit_is_idempotent_with_ticket_id(client):
     again = client.post("/tickets", json={"text": SIMPLE, "ticket_id": "abc-1"})
     assert first.status_code == 201
     assert again.status_code == 200 and again.json()["already_existed"] is True
-    assert len(client.get("/tickets/abc-1/trace").json()["events"]) == 5  # not run twice
+    assert len(client.get("/tickets/abc-1/trace").json()["events"]) == 6  # not run twice
     assert client.get("/tickets").json()["total"] == 1
 
 
@@ -113,14 +113,14 @@ def test_list_filter_and_paging(client):
 def test_stream_replays_steps_then_done(client):
     t = submit(client, SIMPLE).json()
     events = parse_sse(client.get(f"/tickets/{t['id']}/stream").text)
-    assert [e for e, _ in events].count("trace") == 5
+    assert [e for e, _ in events].count("trace") == 6
     assert events[-1][0] == "done" and events[-1][1]["status"] == "auto_resolved"
 
 
 def test_stream_resumes_after_last_event_id(client):
     t = submit(client, SIMPLE).json()
     events = parse_sse(client.get(f"/tickets/{t['id']}/stream", headers={"Last-Event-ID": "3"}).text)
-    assert [d["seq"] for e, d in events if e == "trace"] == [4, 5]
+    assert [d["seq"] for e, d in events if e == "trace"] == [4, 5, 6]
 
 
 def test_quarantined_injection_is_logged_and_has_no_draft(client):

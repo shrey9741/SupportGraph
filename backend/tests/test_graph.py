@@ -21,7 +21,7 @@ def test_simple_billing_ticket_auto_resolves(graph):
     s = run_ticket(graph, "t1", "How do I update the credit card on file? My old card expired.")
     assert s["final_outcome"] == "auto_resolved"
     assert s["final_reply"]
-    assert nodes_visited(s) == ["intake", "triage", "billing_specialist", "guardrail", "resolve"]
+    assert nodes_visited(s) == ["intake", "triage", "lookup", "billing_specialist", "guardrail", "resolve"]
 
 
 def test_legal_threat_escalates_even_after_specialist_drafts(graph):
