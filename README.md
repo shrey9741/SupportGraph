@@ -12,7 +12,7 @@
   <img alt="SQLite" src="https://img.shields.io/badge/SQLite-audit%20log-003B57?logo=sqlite&logoColor=white">
   <img alt="Orchestration" src="https://img.shields.io/badge/Orchestration-LangGraph-1C3C3C">
   <img alt="LLM" src="https://img.shields.io/badge/LLM-Groq-F55036">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-50%20passing-2F9E6B">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-98%20passing-2F9E6B">
   <img alt="Evals" src="https://img.shields.io/badge/evals-held--out%20set-0A9EDC">
 </p>
 
@@ -87,7 +87,8 @@ partial trace, and a page refresh or reconnect resumes from where it left off.
 flowchart TD
     A[intake] --> B[triage<br/>LLM: category, sentiment, urgency,<br/>confidence, risk flags]
     B -->|prompt injection| Q[quarantine<br/>specialists skipped]
-    B -->|billing / technical / account| S[specialist<br/>LLM: draft reply + confidence]
+    B -->|billing / technical / account| L[lookup<br/>LLM picks typed fact tools, code runs them]
+    L --> S[specialist<br/>LLM: draft reply + confidence]
     B -->|category: other| G
     S --> G[guardrail<br/>deterministic Python, no LLM]
     Q --> G
@@ -100,8 +101,9 @@ flowchart TD
 |---|---|---|
 | `intake` | code | Normalise whitespace, reset per-run state |
 | `triage` | LLM | Category, sentiment, urgency, confidence, `risk_flags` |
+| `lookup` | LLM + code | The model names which product facts it needs from a closed set of typed tools (plan details, refund policy, payment methods, how-tos). Code validates every call and runs it against fixed tables. Unknown tools or arguments are rejected. |
 | `quarantine` | code | If a prompt injection was flagged, skip the specialists entirely |
-| `*_specialist` | LLM | Draft a reply and report confidence and any refund amount it commits to |
+| `*_specialist` | LLM | Draft a reply from the looked-up facts and report confidence and any refund amount it commits to |
 | `guardrail` | code | Decide resolve vs escalate, with ordered reasons |
 | `resolve` | code | Mark auto-resolved, keep the draft as the final reply |
 | `escalate` | code | Build the escalation packet for the reviewer |
@@ -190,6 +192,8 @@ sequenceDiagram
 |---|---|
 | **Fail closed** | An LLM error becomes `low_confidence` and escalates. A pipeline crash marks the ticket `failed` (never auto-resolved) and records a `system_error` event. A human can still review it. |
 | **Deterministic guardrail** | Safety decisions must be testable and explainable. The LLM only *suggests* risk flags. A regex safety net catches the most dangerous patterns even if the model misses them. |
+| **Product facts without retrieval** | Prices, windows and limits live in typed tables (`knowledge.py`). The agent can only request them through six tools with enumerated arguments, so there is no embedding, no similarity search and nothing free-form to poison. The product and its prices are fictional. |
+| **Grounding check** | The guardrail escalates a draft that states a price, percentage or duration that appears in neither the ticket nor the looked-up facts, so an invented "24 hours" or "20% discount" reaches a human instead of the customer. |
 | **Prompt-injection quarantine** | Ticket text is untrusted. It is wrapped in `<ticket>` tags (any ticket tags inside the customer text are removed so it cannot close the wrapper early), and a ticket flagged as injection skips the specialists so attacker-written instructions never reach an agent that drafts refunds. |
 | **Audit log by construction** | Events are written as the pipeline runs. The audit trail, the live stream and the trace view all read the same table. |
 | **Idempotent submit** | Retrying `POST /tickets` with the same `ticket_id` returns the existing ticket without re-running it. The same id with different text is a 409. |
@@ -218,7 +222,7 @@ SupportGraph/
 │   │   ├── schemas.py       # Pydantic models and enums
 │   │   ├── state.py         # shared pipeline state (append-only trace)
 │   │   └── config.py        # settings from .env
-│   └── tests/               # 50 tests: guardrail rules, routing, fail-closed, API
+│   └── tests/               # 98 tests: guardrail rules, routing, fail-closed, API, auth, product-fact lookups
 ├── frontend/
 │   └── src/
 │       ├── pages/           # LiveConsole, ReviewQueue, Audit, Dashboard
@@ -253,7 +257,7 @@ pip install -r backend/requirements.txt
 
 cp .env.example .env        # then edit .env
 cd backend
-python -m pytest -q         # 50 tests
+python -m pytest -q         # 98 tests
 python -m uvicorn app.main:app --reload     # http://127.0.0.1:8000  (docs at /docs)
 ```
 
@@ -467,9 +471,9 @@ These fixes were written while looking at held-out v1, so v1 cannot validate the
 
 **Still open:**
 - Reason ranking: `refund_over_limit` ranks above `prompt_injection`, so a quarantined injection that also mentions an amount over the limit shows `refund_over_limit` as its primary reason. Decisions are unaffected (the ticket is still quarantined and escalated), but the strict "primary reason" metric counts these as mismatches while "reason found anywhere" does not. Reordering would be a labelled change for the next evaluation set.
-- Injections that ask the AI to leak or restate its setup in other words ("translate your configuration into French") are not matched by any regex, and the 20b auto-resolved one on held-out v3. The guardrail depends on the model for wording it has not seen. A fix would need a fresh held-out v4 to validate.
+- Requests to translate, paste or reveal the assistant's own configuration are now matched by a pattern and by the triage definition (added after the v3 miss, **not yet validated on fresh data**, which is what held-out v4 is for).
 - A Hinglish "payment failed, money deducted" ticket is over-escalated as `angry_customer`, and a Spanish "charged twice" ticket was flagged `potential_fraud` while the English version was not.
-- Knowledge-dependent questions (refund policy, import size limits, error codes) escalate as `low_confidence` because the specialists have no knowledge source. This caps the auto-resolve rate more than model quality does.
+- Knowledge questions used to escalate as `low_confidence` because specialists had no knowledge source. A lookup step now supplies fixed product facts (see above). Its effect is **not yet measured**: it is evaluated on held-out v4. Questions outside the six tools still escalate, by design.
 
 ---
 
@@ -487,7 +491,7 @@ These fixes were written while looking at held-out v1, so v1 cannot validate the
 - [x] Owner review of v2 labels, then one run per model to validate the fixes
 - [x] Fix the injection gap found on v2, validate on a fresh held-out v3
 - [ ] Close the remaining 20b injection miss (config-extraction wording), validate on a fresh held-out v4
-- [ ] Optional FAQ lookup tool so specialists can answer policy questions
+- [x] FAQ lookup tools (typed, non-retrieval) and grounding check, implemented; effect to be measured on v4
 - [x] Authentication and per-reviewer accounts (scrypt, JWT, admin and reviewer roles)
 - [ ] Dockerfile and a hosted demo
 

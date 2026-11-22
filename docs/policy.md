@@ -73,3 +73,11 @@ exactly what the evaluation measures.
 Refunds, deletions, and any outbound email to a customer are treated as
 irreversible. In v1 the agent drafts these but a human approves them where an
 escalation rule says so.
+
+## Product facts
+
+Prices, refund windows, payment methods and how-to paths the agents may quote live in
+`backend/app/knowledge.py` and are read only through the lookup tools. The product is
+fictional. If a rule changes there, re-check any ticket labels that depend on it.
+A draft that states a price, percentage or duration found in neither the ticket nor the
+looked-up facts is escalated as `low_confidence` by the guardrail.
