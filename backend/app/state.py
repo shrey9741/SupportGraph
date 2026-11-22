@@ -17,6 +17,8 @@ class TicketState(TypedDict, total=False):
     urgency: str
     triage_confidence: float
     risk_flags: list[str]
+    # product-fact lookups made for the specialist
+    facts: list[dict[str, Any]]
     # specialist
     specialist_used: str | None
     draft_reply: str | None
