@@ -1,7 +1,9 @@
 """Wires the nodes into the LangGraph pipeline.
 
-START -> intake -> triage -> (billing | technical | account specialist | guardrail | quarantine)
-specialist -> guardrail -> (resolve | escalate) -> END
+START -> intake -> triage -> (lookup | guardrail | quarantine)
+lookup -> (billing | technical | account specialist) -> guardrail -> (resolve | escalate) -> END
+
+The lookup step reads fixed product facts through a closed set of typed tools (no retrieval).
 
 Tickets triaged as "other" skip the specialists and go straight to the guardrail.
 Tickets containing a prompt injection are quarantined: they skip the specialists
@@ -28,8 +30,11 @@ def is_quarantined(state: TicketState) -> bool:
 def route_after_triage(state: TicketState) -> str:
     if is_quarantined(state):
         return "quarantine"
-    category = state.get("category", "other")
-    return f"{category}_specialist" if category in SPECIALISTS else "guardrail"
+    return "lookup" if state.get("category", "other") in SPECIALISTS else "guardrail"
+
+
+def route_after_lookup(state: TicketState) -> str:
+    return f"{state['category']}_specialist"
 
 
 def route_after_guardrail(state: TicketState) -> str:
@@ -50,12 +55,9 @@ def build_graph(llm: LLMClient | None = None, settings: Settings | None = None):
     g.add_conditional_edges(
         "triage",
         route_after_triage,
-        {
-            **{f"{c}_specialist": f"{c}_specialist" for c in SPECIALISTS},
-            "guardrail": "guardrail",
-            "quarantine": "quarantine",
-        },
+        {"lookup": "lookup", "guardrail": "guardrail", "quarantine": "quarantine"},
     )
+    g.add_conditional_edges("lookup", route_after_lookup, {f"{c}_specialist": f"{c}_specialist" for c in SPECIALISTS})
     for c in SPECIALISTS:
         g.add_edge(f"{c}_specialist", "guardrail")
     g.add_edge("quarantine", "guardrail")
