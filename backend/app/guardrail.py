@@ -9,7 +9,7 @@ Escalate if ANY rule fires. Rules follow docs/policy.md:
 5. Negative sentiment with high urgency and no other explanation.
 """
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 # Reasons are returned sorted by this priority; the first is the "primary" reason.
@@ -39,6 +39,9 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
         r"|\b(repeat|print|show|output|reveal|display|share|disclose|tell me)\b.{0,40}\b"
         r"(hidden|system|internal|initial|original|secret|underlying)\s+(instructions|prompt|rules|guidelines)"
         r"|\b(repeat|print|output)\b.{0,30}\byour\s+(instructions|prompt)\b"
+        # Asking the assistant to hand over its own configuration or prompt.
+        r"|\b(translate|paste|print|output|reveal|display|dump|copy|recite|repeat|disclose|show)\b.{0,40}\byour\s+"
+        r"(own\s+)?(configuration|config|programming|prompt|instructions|directives)\b(?!\s+(options?|page|guide|docs?|file))"
         # Role or mode switching, and blanket approval orders.
         r"|\bfrom now on,?\s+(you|the\s+(ai|assistant))\b"
         r"|\bpretend\s+(to be|you are|that you)\b"
@@ -97,10 +100,29 @@ _MONEY_WORDS_RE = re.compile(
 )
 
 
+_FIGURE_RE = re.compile(
+    r"\$\s?\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b\d+(?:\s?(?:to|-)\s?\d+)?\s+(?:business\s+|calendar\s+)?(?:minutes?|hours?|days?|weeks?|months?)\b",
+    re.I,
+)
+
+
+def _figure_key(fig: str) -> str:
+    """'$12.00' and '$12' compare equal; spacing and case are ignored."""
+    f = re.sub(r"\s+", "", fig.lower()).replace(",", "")
+    return re.sub(r"(\d+)\.0+(?!\d)", r"\1", f)
+
+
+def ungrounded_figures(draft: str, ticket_text: str, facts: list[str]) -> list[str]:
+    """Prices, percentages and durations in the draft that appear in neither the ticket nor the product facts."""
+    allowed = {_figure_key(m) for m in _FIGURE_RE.findall(ticket_text + "\n" + "\n".join(facts))}
+    return sorted({m for m in _FIGURE_RE.findall(draft) if _figure_key(m) not in allowed})
+
+
 @dataclass
 class GuardrailDecision:
     decision: str  # "resolve" | "escalate"
     reasons: list[str]
+    ungrounded: list[str] = field(default_factory=list)  # figures in the draft with no source
 
 
 def regex_flags(text: str) -> list[str]:
@@ -145,6 +167,14 @@ def evaluate(
         if spec_conf is None or float(spec_conf) < confidence_threshold:
             reasons.add("low_confidence")
 
+    # A draft that states a price, percentage or duration found nowhere in the ticket or the
+    # looked-up facts is treated as invented, so a human checks it.
+    bad: list[str] = []
+    if draft:
+        bad = ungrounded_figures(draft, text, [f.get("text", "") for f in (state.get("facts") or [])])
+        if bad:
+            reasons.add("low_confidence")
+
     commits = state.get("commits_to_refund_usd")
     if commits is not None and float(commits) > refund_limit_usd:
         reasons.add("refund_over_limit")
@@ -161,9 +191,9 @@ def evaluate(
         reasons.add("angry_customer")
 
     if not reasons:
-        return GuardrailDecision("resolve", [])
+        return GuardrailDecision("resolve", [], bad)
 
     ordered = sorted(
         reasons, key=lambda r: PRIORITY.index(r) if r in PRIORITY else len(PRIORITY)
     )
-    return GuardrailDecision("escalate", ordered)
+    return GuardrailDecision("escalate", ordered, bad)
