@@ -94,3 +94,16 @@ class SpecialistOutput(BaseModel):
     draft_reply: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0)
     commits_to_refund_usd: Optional[float] = Field(default=None, ge=0)
+
+
+class Lookup(BaseModel):
+    """One request to a product-facts tool. Arguments are checked against the tool's allowed values."""
+
+    tool: str
+    arg: Optional[str] = None
+
+
+class LookupPlan(BaseModel):
+    """Which product facts the specialist needs. Empty means none."""
+
+    lookups: list[Lookup] = Field(default_factory=list, max_length=4)
