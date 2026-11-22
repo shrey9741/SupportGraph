@@ -42,9 +42,14 @@ function StepBody({ step, events, ticket }) {
         </div>
       );
     }
+    const lk = events.find((e) => e.node === "lookup")?.output;
     return (
       <div className="space-y-3">
-        <Pill tone="accent" mono>{o.specialist_used}</Pill>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Pill tone="accent" mono>{o.specialist_used}</Pill>
+          {lk?.lookups?.map((l) => <Pill key={l.tool + l.arg} tone="neutral" mono>{l.arg ? `${l.tool}(${l.arg})` : l.tool}</Pill>)}
+        </div>
+        {lk && !lk.lookups?.length && <div className="text-[11px] text-muted">No product facts were needed.</div>}
         {o.draft_reply
           ? <blockquote className="rounded-md border-l-2 border-accent bg-sunken px-3 py-2 text-sm leading-relaxed">{o.draft_reply}</blockquote>
           : <div className="text-xs text-bad">{o.error || "No draft was produced."}</div>}
@@ -58,6 +63,7 @@ function StepBody({ step, events, ticket }) {
     return reasons.length ? (
       <div className="space-y-2">
         <div className="text-xs text-muted">Deterministic rules fired. No LLM is involved in this decision.</div>
+        {o.ungrounded_figures?.length > 0 && <div className="text-xs text-bad">Draft states figures with no source: {o.ungrounded_figures.join(", ")}</div>}
         <div className="flex flex-wrap gap-1.5">{reasons.map((r, i) => <ReasonChip key={r} reason={r} primary={i === 0} />)}</div>
       </div>
     ) : (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ChevronDown, ChevronRight, Copy, Check, ScrollText, Search, ArrowLeft, UserCheck, Shield, Brain, FileInput, CircleCheck, ShieldAlert, AlertTriangle, Wrench, CreditCard, User } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Check, ScrollText, Search, ArrowLeft, UserCheck, Shield, Brain, FileInput, CircleCheck, ShieldAlert, AlertTriangle, Wrench, CreditCard, User, BookOpen } from "lucide-react";
 import { api } from "../lib/api.js";
 import { usePolling } from "../lib/usePolling.js";
 import { clock, durationSeconds, shortId, timeAgo } from "../lib/format.js";
@@ -64,7 +64,7 @@ function AuditList() {
 }
 
 const NODE_ICON = {
-  intake: FileInput, triage: Brain, quarantine: ShieldAlert, guardrail: Shield, resolve: CircleCheck,
+  intake: FileInput, triage: Brain, lookup: BookOpen, quarantine: ShieldAlert, guardrail: Shield, resolve: CircleCheck,
   escalate: UserCheck, human_review: UserCheck, system_error: AlertTriangle,
   billing_specialist: CreditCard, technical_specialist: Wrench, account_specialist: User,
 };
@@ -83,8 +83,13 @@ function summary(ev) {
   switch (ev.node) {
     case "intake": return `${o.chars} characters received`;
     case "triage": return `${o.category}, ${o.sentiment}, urgency ${o.urgency}, confidence ${Math.round((o.triage_confidence ?? 0) * 100)}%`;
+    case "lookup": {
+      const n = o.lookups?.length || 0;
+      if (o.lookup_error) return "Lookup failed. Specialist ran without product facts.";
+      return n ? `Looked up: ${o.lookups.map((l) => (l.arg ? `${l.tool}(${l.arg})` : l.tool)).join(", ")}` : "No product facts needed";
+    }
     case "quarantine": return "Prompt injection detected. Specialist skipped.";
-    case "guardrail": return o.guardrail_reasons?.length ? `Rules fired: ${o.guardrail_reasons.join(", ")}` : "No rule fired";
+    case "guardrail": return o.ungrounded_figures?.length ? `Rules fired: ${o.guardrail_reasons.join(", ")}. Figures with no source: ${o.ungrounded_figures.join(", ")}` : o.guardrail_reasons?.length ? `Rules fired: ${o.guardrail_reasons.join(", ")}` : "No rule fired";
     case "resolve": return "Reply sent automatically";
     case "escalate": return `Escalated. Primary reason: ${o.primary_reason ?? "none"}`;
     case "human_review": return `${o.reviewer} chose "${o.action}"${o.note ? `: ${o.note}` : ""}`;
