@@ -21,6 +21,7 @@ function Kpi({ icon: Icon, label, value, hint }) {
 
 
 
+
 function Panel({ title, sub, children }) {
   return (
     <Card className="p-4">
