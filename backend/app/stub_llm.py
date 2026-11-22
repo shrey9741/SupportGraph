@@ -7,7 +7,7 @@ evaluation. It is intentionally simple and will make mistakes.
 import re
 
 from .llm import LLMClient
-from .schemas import SpecialistOutput, TriageOutput
+from .schemas import Lookup, LookupPlan, SpecialistOutput, TriageOutput
 
 BILLING_KW = (
     "charge", "charged", "invoice", "refund", "billing", "billed", "payment",
@@ -65,6 +65,8 @@ class StubLLM(LLMClient):
         text = _ticket_text(user)
         if schema is TriageOutput:
             return self._triage(text)
+        if schema is LookupPlan:
+            return self._lookup(text)
         if schema is SpecialistOutput:
             return self._specialist(text, system)
         raise ValueError(f"StubLLM cannot produce {schema.__name__}")
@@ -114,6 +116,18 @@ class StubLLM(LLMClient):
             confidence=confidence,
             risk_flags=flags,
         )
+
+    def _lookup(self, text: str) -> LookupPlan:
+        t = text.lower()
+        out: list[Lookup] = []
+        if "refund" in t:
+            out.append(Lookup(tool="get_refund_policy"))
+        if re.search(r"payment method|upi|net banking|paypal", t):
+            out.append(Lookup(tool="get_payment_methods"))
+        for plan in ("free", "pro", "team", "enterprise"):
+            if re.search(rf"\b{plan}\b", t) and len(out) < 3:
+                out.append(Lookup(tool="get_plan_details", arg=plan))
+        return LookupPlan(lookups=out[:3])
 
     def _specialist(self, text: str, system: str) -> SpecialistOutput:
         category = next((c for c in REPLIES if f"{c}:" in system), "billing")
