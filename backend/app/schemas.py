@@ -60,6 +60,10 @@ class TicketLabel(BaseModel):
     urgency: Urgency
     should_escalate: bool
     escalation_reason: Optional[EscalationReason] = None
+    # Only used by held-out v4: which part of the set a ticket belongs to, and which strings a correct
+    # reply must contain ("a|b" means either). Absent in older datasets.
+    section: Optional[str] = None
+    must_mention: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def check_escalation_consistency(self):
