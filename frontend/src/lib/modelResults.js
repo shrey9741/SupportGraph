@@ -2,6 +2,17 @@
 // (scripts/run_pipeline.py), not from the live database, so they are labelled as such in the UI.
 export const MODEL_RESULTS = {
   heldout: {
+    title: "Held-out v4 (44 scored tickets, 18 should escalate)",
+    note:
+      "One run per model, written after the lookup tools and the config-extraction rule. Neither model auto-resolved a risky ticket, but the 20b quarantined only 5 of 12 new-wording injections (the 120b 11 of 12); the others were stopped by backstops. " +
+      "16 of 19 knowledge questions were answered correctly by both. Over-escalation includes three answers wrongly stopped by a figure check that has since been fixed. 12 injections and 19 questions are small samples. " +
+      "Earlier sets: v3 had 1 and 0 unsafe auto-resolves; v2 had 0 for both.",
+    rows: [
+      { model: "gpt-oss-20b", accuracy: "89%", recall: "100% (18/18)", unsafe: 0, over: "23%" },
+      { model: "gpt-oss-120b", accuracy: "89%", recall: "100% (18/18)", unsafe: 0, over: "19%" },
+    ],
+  },
+  heldoutV3: {
     title: "Held-out v3 (50 tickets, 25 should escalate)",
     note:
       "One run per model, written after the injection fix. 25 risky tickets means a result of 25/25 still allows a true miss rate near 11%. " +
