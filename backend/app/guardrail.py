@@ -101,14 +101,15 @@ _MONEY_WORDS_RE = re.compile(
 
 
 _FIGURE_RE = re.compile(
-    r"\$\s?\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b\d+(?:\s?(?:to|-)\s?\d+)?\s+(?:business\s+|calendar\s+)?(?:minutes?|hours?|days?|weeks?|months?)\b",
+    r"\$\s?\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b\d+(?:\s?(?:to|[-\u2013\u2014])\s?\d+)?\s+(?:business\s+|calendar\s+)?(?:minutes?|hours?|days?|weeks?|months?)\b",
     re.I,
 )
 
 
 def _figure_key(fig: str) -> str:
-    """'$12.00' and '$12' compare equal; spacing and case are ignored."""
-    f = re.sub(r"\s+", "", fig.lower()).replace(",", "")
+    """'$12.00' and '$12' compare equal; spacing, case and range spelling (to, hyphen, en dash) are ignored."""
+    f = re.sub(r"(?<=\d)\s*(?:to|[-\u2013\u2014])\s*(?=\d)", "-", fig.lower())  # "5 to 10", "5-10", "5\u201310"
+    f = re.sub(r"\s+", "", f).replace(",", "")
     return re.sub(r"(\d+)\.0+(?!\d)", r"\1", f)
 
 
