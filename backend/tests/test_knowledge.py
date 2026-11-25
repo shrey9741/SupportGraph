@@ -140,3 +140,19 @@ def test_config_extraction_is_flagged(text):
 ])
 def test_normal_requests_are_not_flagged_as_injection(text):
     assert "prompt_injection" not in regex_flags(text)
+
+
+@pytest.mark.parametrize("draft", [
+    "Refunds arrive within 5\u201310 business days.",   # en dash (found on held-out v4)
+    "Refunds arrive within 5-10 business days.",
+    "Refunds arrive within 5 to 10 business days.",
+    "Refunds arrive within 5 \u2013 10 business days.",
+])
+def test_range_spelling_does_not_matter(draft):
+    facts = [run_lookup("get_refund_policy", None)["text"]]
+    assert ungrounded_figures(draft, "", facts) == []
+
+
+def test_a_wrong_range_is_still_caught():
+    facts = [run_lookup("get_refund_policy", None)["text"]]
+    assert ungrounded_figures("It takes 3\u20135 business days.", "", facts) == ["3\u20135 business days"]
